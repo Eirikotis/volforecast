@@ -1,0 +1,17 @@
+/* Custom styles for volatility forecasting app */
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.chart-container {
+    margin: 20px 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container {
+        padding: 1rem;
+    }
+}
+

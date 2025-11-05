@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error - Volatility Forecasting</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/theme.css">
+</head>
+<body class="dark-container">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <div class="dark-card">
+            <!-- Header -->
+            <div class="mb-6">
+                <h1 class="text-3xl font-bold" style="color: var(--accent-red); margin-bottom: 0.5rem;">⚠️ Error</h1>
+                <p class="dark-text-muted">An error occurred while running the volatility forecast engine.</p>
+            </div>
+            
+            <!-- Error Message -->
+            <div class="dark-warning" style="background-color: rgba(226, 59, 59, 0.1); border-color: rgba(226, 59, 59, 0.3);">
+                <h3 class="font-semibold mb-2" style="color: var(--accent-red);">Error Details</h3>
+                <p class="text-sm dark-text-muted font-mono whitespace-pre-wrap">{{ error_message }}</p>
+            </div>
+            
+            <!-- Common Causes -->
+            <div class="dark-warning mb-6">
+                <h3 class="font-semibold mb-2" style="color: #ffa500;">Common Causes</h3>
+                <ul class="list-disc list-inside text-sm dark-text-muted" style="margin-top: 0.5rem;">
+                    <li>Network issues connecting to exchange API</li>
+                    <li>Invalid symbol or timeframe combination</li>
+                    <li>Insufficient historical data for the selected parameters</li>
+                    <li>Model convergence issues (try a different model or distribution)</li>
+                    <li>Requested lookback bars exceeds available data</li>
+                </ul>
+            </div>
+            
+            <!-- Back Button with Form Values -->
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                <a href="/?symbol={{ form_values.symbol|urlencode }}&timeframe={{ form_values.timeframe|urlencode }}&horizon={{ form_values.horizon|urlencode }}&sims={{ form_values.sims|urlencode }}&model={{ form_values.model|urlencode }}&dist={{ form_values.dist|urlencode }}&p={{ form_values.p|urlencode }}&q={{ form_values.q|urlencode }}&mean_spec={{ form_values.mean_spec|urlencode }}&seed={{ form_values.seed|urlencode }}&vol_scale={{ form_values.vol_scale|urlencode }}&zcap={{ form_values.zcap|urlencode }}&lookback_bars={{ form_values.lookback_bars|urlencode }}&drift_mode={{ form_values.drift_mode|urlencode }}&drift_user_pct={{ form_values.drift_user_pct|urlencode }}"
+                    class="dark-btn">
+                    ← Try Again (Form Pre-filled)
+                </a>
+                <a href="/" class="dark-btn-secondary">
+                    Start Fresh
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

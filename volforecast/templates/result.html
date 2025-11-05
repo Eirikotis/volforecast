@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forecast Results - Volatility Forecasting</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link rel="stylesheet" href="/static/theme.css">
+</head>
+<body class="dark-container">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <!-- Header -->
+        <div class="mb-6">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <a href="/" class="dark-link">← Back to Form</a>
+                <a href="/logout" class="dark-link" style="font-size: 0.875rem;">Logout</a>
+            </div>
+            <h1 class="text-3xl dark-title">Forecast Results</h1>
+            <div class="mt-2 dark-text-muted text-sm">
+                <span class="font-semibold">{{ payload.meta.symbol }}</span> | 
+                {{ payload.meta.timeframe }} | 
+                H={{ payload.meta.horizon }} | 
+                SIMS={{ payload.meta.sims }} | 
+                Model: {{ payload.fit.model }}
+            </div>
+        </div>
+        
+        <!-- Warnings -->
+        {% if payload.warnings %}
+        <div class="dark-warning">
+            <h3 class="mb-2">⚠️ Warnings</h3>
+            <ul class="list-disc list-inside text-sm">
+                {% for warning in payload.warnings %}
+                <li>{{ warning }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        
+        <!-- Model Diagnostics -->
+        <div class="dark-card">
+            <h2 class="text-xl dark-title mb-4">Model Diagnostics</h2>
+            <div class="dark-grid dark-grid-cols-2" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; text-sm;">
+                <div>
+                    <span class="dark-text-muted">Converged:</span>
+                    <span class="font-semibold {% if payload.fit.diagnostics.converged %}dark-text{% else %}" style="color: var(--accent-red);">{% endif %}">
+                        {{ payload.fit.diagnostics.converged }}
+                    </span>
+                </div>
+                <div>
+                    <span class="dark-text-muted">AIC:</span>
+                    <span class="font-semibold dark-text">{{ payload.fit.diagnostics.aic|ff }}</span>
+                </div>
+                <div>
+                    <span class="dark-text-muted">BIC:</span>
+                    <span class="font-semibold dark-text">{{ payload.fit.diagnostics.bic|ff }}</span>
+                </div>
+                <div>
+                    <span class="dark-text-muted">Iterations:</span>
+                    <span class="font-semibold dark-text">{{ payload.fit.diagnostics.iters }}</span>
+                </div>
+            </div>
+            <div class="mt-4 dark-text-xs">
+                <span class="dark-badge">
+                    Data: {{ payload.meta.data_source_used | upper }}
+                    {% if payload.meta.used_fallback %}<span class="fallback">(fallback)</span>{% endif %}
+                    {% if payload.meta.used_cache %}<span class="cache">(cache)</span>{% endif %}
+                </span>
+            </div>
+        </div>
+        
+        <!-- Chart 1: Volatility History + Forecast -->
+        <div class="dark-chart-container">
+            <h2 class="text-xl dark-title mb-4">Conditional Volatility History & Forecast</h2>
+            <div id="volChart" style="height: 400px;"></div>
+        </div>
+        
+        <!-- Chart 2: Price with Simulated Paths and VaR95 Band -->
+        <div class="dark-chart-container">
+            <h2 class="text-xl dark-title mb-4">Price with Simulated Paths & VaR95 Band</h2>
+            <div id="priceChart" style="height: 400px;"></div>
+        </div>
+        
+        <!-- Expected Range Card -->
+        <div class="dark-card">
+            <h2 class="text-xl dark-title mb-2">Expected Range (H = {{ payload.expected_range.horizon_steps }} @ {{ payload.expected_range.timeframe }})</h2>
+            {% if payload.meta.sims and payload.meta.sims < 500 %}
+            <p class="dark-text-xs mb-2">Range estimates may be noisy (few paths).</p>
+            {% endif %}
+            <div class="dark-space-y-2 text-sm">
+                <div>
+                    <span class="font-semibold dark-text">90%:</span>
+                    <span class="dark-text">${{ payload.expected_range.price.p90.low|ff }} – ${{ payload.expected_range.price.p90.high|ff }}</span>
+                    <div class="dark-text-muted text-xs">{{ payload.expected_range.return_pct.p90.low|ff }}% – {{ payload.expected_range.return_pct.p90.high|ff }}%</div>
+                </div>
+                <div>
+                    <span class="font-semibold dark-text">95%:</span>
+                    <span class="dark-text">${{ payload.expected_range.price.p95.low|ff }} – ${{ payload.expected_range.price.p95.high|ff }}</span>
+                    <div class="dark-text-muted text-xs">{{ payload.expected_range.return_pct.p95.low|ff }}% – {{ payload.expected_range.return_pct.p95.high|ff }}%</div>
+                </div>
+                <div>
+                    <span class="font-semibold dark-text">99%:</span>
+                    <span class="dark-text">${{ payload.expected_range.price.p99.low|ff }} – ${{ payload.expected_range.price.p99.high|ff }}</span>
+                    <div class="dark-text-muted text-xs">{{ payload.expected_range.return_pct.p99.low|ff }}% – {{ payload.expected_range.return_pct.p99.high|ff }}%</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Risk Metrics Table -->
+        <div class="dark-card">
+            <h2 class="text-xl dark-title mb-4">Risk Metrics (VaR / CVaR)</h2>
+            <div class="overflow-x-auto">
+                <table class="dark-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>1-Step</th>
+                            <th>H-Step</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="font-medium dark-text">VaR 95% (%)</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.VaR95_1_pct|ff }}%</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.VaR95_H_pct|ff }}%</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">CVaR 95% (%)</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.ES95_1_pct|ff }}%</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.ES95_H_pct|ff }}%</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">VaR 99% (%)</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.VaR99_1_pct|ff }}%</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.VaR99_H_pct|ff }}%</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">CVaR 99% (%)</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.ES99_1_pct|ff }}%</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.ES99_H_pct|ff }}%</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">VaR 95% Upside (%)</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.VaR95_1_up_pct|ff }}%</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.VaR95_H_up_pct|ff }}%</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">CVaR 95% Upside (%)</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.ES95_1_up_pct|ff }}%</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.ES95_H_up_pct|ff }}%</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">VaR 99% Upside (%)</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.VaR99_1_up_pct|ff }}%</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.VaR99_H_up_pct|ff }}%</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">CVaR 99% Upside (%)</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.ES99_1_up_pct|ff }}%</td>
+                            <td class="dark-text">{{ payload.sim.risk_pct.ES99_H_up_pct|ff }}%</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">VaR 95% (Price)</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.VaR95_1_price|ff }}</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.VaR95_H_price|ff }}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">CVaR 95% (Price)</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.ES95_1_price|ff }}</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.ES95_H_price|ff }}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">VaR 99% (Price)</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.VaR99_1_price|ff }}</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.VaR99_H_price|ff }}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">CVaR 99% (Price)</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.ES99_1_price|ff }}</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.ES99_H_price|ff }}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">VaR 95% Upside (Price)</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.VaR95_1_up_price|ff }}</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.VaR95_H_up_price|ff }}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">CVaR 95% Upside (Price)</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.ES95_1_up_price|ff }}</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.ES95_H_up_price|ff }}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">VaR 99% Upside (Price)</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.VaR99_1_up_price|ff }}</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.VaR99_H_up_price|ff }}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium dark-text">CVaR 99% Upside (Price)</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.ES99_1_up_price|ff }}</td>
+                            <td class="dark-text">${{ payload.sim.risk_price.ES99_H_up_price|ff }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 dark-text-muted text-sm">
+                <p><strong>Last Close:</strong> ${{ payload.meta.last_close|ff }}</p>
+                <p><strong>Bars Used:</strong> {{ payload.meta.bars_used }}</p>
+            </div>
+        </div>
+
+        <!-- Debug Info (Collapsible) -->
+        {% if form_values.show_debug in ['on','true','1','yes'] %}
+        <details class="dark-details">
+            <summary class="mb-4">Debug Info</summary>
+            <div class="dark-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; text-sm;">
+                {% for k, v in payload.debug.items() %}
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.25rem;">
+                    <span class="dark-text-muted">{{ k }}</span>
+                    <span class="font-semibold dark-text">{{ v }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
+        
+        <!-- Back Button -->
+        <div style="text-align: center;">
+            {% if form_values %}
+            <a href="/?symbol={{ form_values.symbol|urlencode }}&timeframe={{ form_values.timeframe|urlencode }}&horizon={{ form_values.horizon|urlencode }}&sims={{ form_values.sims|urlencode }}&model={{ form_values.model|urlencode }}&dist={{ form_values.dist|urlencode }}&p={{ form_values.p|urlencode }}&q={{ form_values.q|urlencode }}&mean_spec={{ form_values.mean_spec|urlencode }}&seed={{ form_values.seed|urlencode }}&vol_scale={{ form_values.vol_scale|urlencode }}&zcap={{ form_values.zcap|urlencode }}&lookback_bars={{ form_values.lookback_bars|urlencode }}&drift_mode={{ form_values.drift_mode|urlencode }}&drift_user_pct={{ form_values.drift_user_pct|urlencode }}"
+                class="dark-btn">
+                ← New Forecast (Form Pre-filled)
+            </a>
+            {% else %}
+            <a href="/" class="dark-btn">
+                ← New Forecast
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        // Chart 1: Volatility History + Forecast
+        const volTimesHist = {{ payload.vol.times_hist | tojson }};
+        const volHist = {{ payload.vol.cond_hist | tojson }};
+        const volFc = {{ payload.vol.forecast | tojson }};
+        const volTimesFc = {{ payload.sim.times | tojson }};
+        
+        // Combine history and forecast times
+        const allVolTimes = volTimesHist.concat(volTimesFc);
+        const allVol = volHist.concat(volFc);
+        
+        const volTrace1 = {
+            x: volTimesHist,
+            y: volHist,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Historical Volatility',
+            line: { color: '#4a9eff', width: 2 }
+        };
+        
+        const volTrace2 = {
+            x: volTimesFc,
+            y: volFc,
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Forecast',
+            marker: { color: '#e23b3b', size: 8, symbol: 'circle' }
+        };
+        
+        Plotly.newPlot('volChart', [volTrace1, volTrace2], {
+            title: { text: 'Conditional Volatility (%)', font: { color: '#e6e7eb' } },
+            xaxis: { title: 'Time', gridcolor: '#2a2a2a', color: '#9aa3ab' },
+            yaxis: { title: 'Volatility (%)', gridcolor: '#2a2a2a', color: '#9aa3ab' },
+            hovermode: 'x unified',
+            paper_bgcolor: '#1a1a1a',
+            plot_bgcolor: '#1a1a1a',
+            font: { color: '#e6e7eb' },
+            legend: { font: { color: '#e6e7eb' } }
+        });
+        
+        // Chart 2: Price with Simulated Paths & VaR95
+        const priceTimes = {{ payload.sim.times | tojson }};
+        const p05 = {{ payload.sim.p05 | tojson }};
+        const p95 = {{ payload.sim.p95 | tojson }};
+        const p50 = {{ payload.sim.p50 | tojson }};
+        const priceHistTimes = {{ payload.sim.price_hist_times | tojson }};
+        const priceHist = {{ payload.sim.price_hist | tojson }};
+        const pathsSample = {{ payload.sim.paths_sample | tojson }};
+
+        const histTrace = {
+            x: priceHistTimes,
+            y: priceHist,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'History',
+            line: { color: '#9aa3ab', width: 2 }
+        };
+
+        // Simulated sample paths (light)
+        const pathTraces = pathsSample.map((path) => ({
+            x: priceTimes,
+            y: path,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Sim Path',
+            line: { color: 'rgba(226, 59, 59, 0.2)', width: 1 },
+            hoverinfo: 'skip',
+            showlegend: false
+        }));
+
+        // VaR95 band (p05 to p95)
+        const upperVaR = {
+            x: priceTimes,
+            y: p95,
+            type: 'scatter',
+            mode: 'lines',
+            name: '95th pct',
+            line: { color: 'rgba(226, 59, 59, 0.0)' },
+            fill: 'none',
+            hoverinfo: 'skip',
+            showlegend: false
+        };
+
+        const lowerVaR = {
+            x: priceTimes,
+            y: p05,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'VaR95 band',
+            line: { color: 'rgba(226, 59, 59, 0.0)' },
+            fill: 'tonexty',
+            fillcolor: 'rgba(226, 59, 59, 0.15)'
+        };
+
+        const medianTrace = {
+            x: priceTimes,
+            y: p50,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Median (p50)',
+            line: { color: '#e6e7eb', width: 2 }
+        };
+
+        Plotly.newPlot('priceChart', [histTrace, ...pathTraces, upperVaR, lowerVaR, medianTrace], {
+            title: { text: 'Price with Simulated Paths & VaR95 Band', font: { color: '#e6e7eb' } },
+            xaxis: { title: 'Time', gridcolor: '#2a2a2a', color: '#9aa3ab' },
+            yaxis: { title: 'Price (USD)', gridcolor: '#2a2a2a', color: '#9aa3ab' },
+            hovermode: 'x unified',
+            paper_bgcolor: '#1a1a1a',
+            plot_bgcolor: '#1a1a1a',
+            font: { color: '#e6e7eb' },
+            legend: { font: { color: '#e6e7eb' } }
+        });
+    </script>
+</body>
+</html>
+

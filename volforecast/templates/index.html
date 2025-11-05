@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volatility Forecasting</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link rel="stylesheet" href="/static/theme.css">
+</head>
+<body class="dark-container">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <div class="dark-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <div>
+                    <h1 class="text-3xl dark-title mb-2">Volatility Forecasting</h1>
+                    <p class="dark-subtitle mb-8">Configure parameters and generate volatility forecasts with VaR metrics</p>
+                </div>
+                <a href="/logout" class="dark-link" style="font-size: 0.875rem;">Logout</a>
+            </div>
+            
+            <form method="POST" action="/forecast" class="space-y-6">
+                <!-- Symbol Selection -->
+                <div>
+                    <label for="symbol" class="dark-label">Symbol</label>
+                    {% if symbol_count and symbol_sources %}
+                    <div class="dark-text-xs mb-1">
+                        Universe: {{ symbol_count }} symbols
+                        {% if form_values.data_source == "auto" or not form_values.data_source %} | Sources: {{ symbol_sources|join(', ') }}{% endif %}
+                    </div>
+                    {% endif %}
+                    <input type="text" id="symbolSearch" placeholder="Search symbols..." 
+                        class="dark-input mb-2"
+                        onkeyup="filterSymbols()">
+                    <select id="symbol" name="symbol" required size="10"
+                        class="dark-select">
+                        {% for sym_item in symbols %}
+                        {% if sym_item is iterable and sym_item is not string %}
+                            {% set sym = sym_item[0] %}
+                            {% set exchange = sym_item[1] %}
+                        {% else %}
+                            {% set sym = sym_item %}
+                            {% set exchange = "" %}
+                        {% endif %}
+                        <option value="{{ sym }}" data-display="{{ sym }}{% if exchange %} • {{ exchange|title }}{% endif %}" {% if (form_values.symbol and sym == form_values.symbol) or (not form_values.symbol and sym == "BTC/USDT") %}selected{% endif %}>
+                            {{ sym }}{% if exchange %} • {{ exchange|title }}{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <script>
+                function filterSymbols() {
+                    const input = document.getElementById('symbolSearch');
+                    const filter = input.value.toUpperCase();
+                    const select = document.getElementById('symbol');
+                    const options = select.getElementsByTagName('option');
+                    
+                    for (let i = 0; i < options.length; i++) {
+                        const option = options[i];
+                        const text = option.getAttribute('data-display') || option.textContent || option.innerText;
+                        if (text.toUpperCase().indexOf(filter) > -1) {
+                            option.style.display = '';
+                        } else {
+                            option.style.display = 'none';
+                        }
+                    }
+                }
+                </script>
+                
+                <!-- Timeframe -->
+                <div>
+                    <label for="timeframe" class="dark-label">Timeframe</label>
+                    <select id="timeframe" name="timeframe" required
+                        class="dark-select">
+                        {% for tf in timeframes %}
+                        <option value="{{ tf }}" {% if (form_values.timeframe and tf == form_values.timeframe) or (not form_values.timeframe and tf == "4h") %}selected{% endif %}>{{ tf }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Horizon & Simulations -->
+                <div class="dark-grid dark-grid-cols-2">
+                    <div>
+                        <label for="horizon" class="dark-label">Forecast Horizon (H)</label>
+                        <input type="number" id="horizon" name="horizon" value="{{ form_values.horizon or '18' }}" min="1" max="100" required
+                            class="dark-input">
+                        <p class="dark-text-xs mt-1">Number of steps ahead</p>
+                    </div>
+                    <div>
+                        <label for="sims" class="dark-label">Simulations (SIMS)</label>
+                        <input type="number" id="sims" name="sims" value="{{ form_values.sims or '1500' }}" min="100" max="2500" required
+                            class="dark-input">
+                        <p class="dark-text-xs mt-1">Monte Carlo paths</p>
+                    </div>
+                </div>
+                
+                <!-- Model Selection -->
+                <div class="dark-grid dark-grid-cols-2">
+                    <div>
+                        <label for="model" class="dark-label">Model</label>
+                        <select id="model" name="model" required
+                            class="dark-select">
+                            {% for m in models %}
+                            <option value="{{ m.lower() }}" {% if (form_values.model and m.lower() == form_values.model) or (not form_values.model and m.lower() == "egarch") %}selected{% endif %}>{{ m }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="dist" class="dark-label">Distribution</label>
+                        <select id="dist" name="dist" required
+                            class="dark-select">
+                            {% for d in dists %}
+                            <option value="{{ d }}" {% if (form_values.dist and d == form_values.dist) or (not form_values.dist and d == "t") %}selected{% endif %}>{{ d }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Advanced Options (Collapsible) -->
+                <details class="dark-details">
+                    <summary>
+                        Advanced Options
+                    </summary>
+                    <div class="mt-4 dark-space-y-4">
+                        <div class="dark-grid dark-grid-cols-2">
+                            <div>
+                                <label for="data_source" class="dark-label">Data Source</label>
+                                <select id="data_source" name="data_source"
+                                    class="dark-select">
+                                    {% for ds in data_sources %}
+                                    <option value="{{ ds.lower() }}" {% if (form_values.data_source and ds.lower() == form_values.data_source) or (not form_values.data_source and ds.lower() == 'auto') %}selected{% endif %}>{{ ds }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="quote" class="dark-label">Quote</label>
+                                <select id="quote" name="quote"
+                                    class="dark-select">
+                                    <option value="AUTO" {% if not form_values.quote or form_values.quote == 'AUTO' %}selected{% endif %}>Auto</option>
+                                    {% for q in quotes %}
+                                    <option value="{{ q }}" {% if form_values.quote == q %}selected{% endif %}>{{ q }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="dark-grid dark-grid-cols-2">
+                            <div>
+                                <label for="p" class="dark-label">GARCH p</label>
+                                <input type="number" id="p" name="p" value="{{ form_values.p or '1' }}" min="1" max="2" required
+                                    class="dark-input">
+                            </div>
+                            <div>
+                                <label for="q" class="dark-label">GARCH q</label>
+                                <input type="number" id="q" name="q" value="{{ form_values.q or '1' }}" min="1" max="2" required
+                                    class="dark-input">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="mean_spec" class="dark-label">Mean Specification</label>
+                            <select id="mean_spec" name="mean_spec"
+                                class="dark-select">
+                                {% for ms in mean_specs %}
+                                <option value="{{ ms }}" {% if (form_values.mean_spec and ms == form_values.mean_spec) or (not form_values.mean_spec and ms == "constant") %}selected{% endif %}>{{ ms }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="dark-grid dark-grid-cols-2">
+                            <div>
+                                <label for="seed" class="dark-label">RNG Seed</label>
+                                <input type="number" id="seed" name="seed" value="{{ form_values.seed or '42' }}"
+                                    class="dark-input">
+                            </div>
+                            <div>
+                                <label for="vol_scale" class="dark-label">Volatility Scale</label>
+                                <input type="number" id="vol_scale" name="vol_scale" value="{{ form_values.vol_scale or '1.0' }}" step="0.1" min="0.1" max="3.0"
+                                    class="dark-input">
+                            </div>
+                        </div>
+                        <div class="dark-grid dark-grid-cols-2">
+                            <div>
+                                <label for="zcap" class="dark-label">Z-Cap</label>
+                                <input type="number" id="zcap" name="zcap" value="{{ form_values.zcap or '6.0' }}" step="0.5" min="3.0" max="10.0"
+                                    class="dark-input">
+                            </div>
+                            <div>
+                                <label for="lookback_bars" class="dark-label">Lookback Bars</label>
+                                <input type="number" id="lookback_bars" name="lookback_bars" value="{{ form_values.lookback_bars or '2000' }}" min="300" max="2190"
+                                    class="dark-input">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="drift_mode" class="dark-label">Drift Mode</label>
+                            <select id="drift_mode" name="drift_mode"
+                                class="dark-select">
+                                <option value="neutral" {% if not form_values.drift_mode or form_values.drift_mode == "neutral" %}selected{% endif %}>Neutral</option>
+                                <option value="from_mu" {% if form_values.drift_mode == "from_mu" %}selected{% endif %}>From Model μ</option>
+                                <option value="user" {% if form_values.drift_mode == "user" %}selected{% endif %}>User Defined</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="drift_user_pct" class="dark-label">User Drift (%)</label>
+                            <input type="number" id="drift_user_pct" name="drift_user_pct" value="{{ form_values.drift_user_pct or '0.0' }}" step="0.01"
+                                class="dark-input">
+                        </div>
+                        <div class="dark-grid dark-grid-cols-2">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="failover" name="failover" class="dark-checkbox" {% if not form_values.failover or form_values.failover in ['on','true','1','yes'] %}checked{% endif %}>
+                                <label for="failover" class="dark-text-muted">Failover</label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="show_debug" name="show_debug" class="dark-checkbox" {% if form_values.show_debug in ['on','true','1','yes'] %}checked{% endif %}>
+                                <label for="show_debug" class="dark-text-muted">Show Debug Info</label>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+                
+                <!-- Submit Button -->
+                <button type="submit" class="dark-btn" style="width: 100%;">
+                    Generate Forecast
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
+
